@@ -36,12 +36,9 @@ if (!userCols.includes('active')) {
   db.exec("ALTER TABLE users ADD COLUMN active INTEGER NOT NULL DEFAULT 1");
 }
 
-// Defensive migration: add `barcode` column to inventory.
-const invCols = db.prepare("PRAGMA table_info(inventory)").all().map(c => c.name);
-if (!invCols.includes('barcode')) {
-  db.exec("ALTER TABLE inventory ADD COLUMN barcode TEXT");
-  db.exec("CREATE INDEX IF NOT EXISTS idx_inventory_barcode ON inventory(barcode)");
-}
+// Defensive migration: add `barcode` column to inventory (only needed for pre-existing DBs
+// that were created without it — fresh DBs already include the column in CREATE TABLE below).
+// Run AFTER CREATE TABLE inventory to avoid "no such table" errors on fresh DBs.
 
 // Auto-bootstrap: if no users exist AND BOOTSTRAP_OWNER_EMAIL + BOOTSTRAP_OWNER_PASSWORD
 // are set, create that owner automatically. Convenient for one-shot Render deploys.
@@ -136,11 +133,20 @@ db.exec(`
     purpose      TEXT,
     status       TEXT DEFAULT 'pending',            -- pending|in_transit|completed
     departed_at  TEXT,
-    arrived_at   TEXT,
+    arrived_at  TEXT,
     notes        TEXT,
     created_at   TEXT DEFAULT (datetime('now')),
     updated_at   TEXT DEFAULT (datetime('now'))
   );
 `);
+
+// Defensive migration: add `barcode` column to inventory (for pre-existing DBs that
+// were created before that column existed). The CREATE TABLE above already includes
+// the column, so this is a no-op on fresh DBs.
+const invCols = db.prepare("PRAGMA table_info(inventory)").all().map(c => c.name);
+if (!invCols.includes('barcode')) {
+  db.exec("ALTER TABLE inventory ADD COLUMN barcode TEXT");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_inventory_barcode ON inventory(barcode)");
+}
 
 module.exports = db;

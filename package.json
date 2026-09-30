@@ -9,6 +9,9 @@
     "dev": "node --watch server.js",
     "seed:owner": "node bin/seed-owner.js"
   },
+  "engines": {
+    "node": "20.x"
+  },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^12.11.1",
