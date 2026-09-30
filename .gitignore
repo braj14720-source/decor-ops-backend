@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# SQLite database + WAL files (Regenerate on first run)
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+data/backups/
+
+# Local env (use .env.example as template)
+.env
+.env.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp

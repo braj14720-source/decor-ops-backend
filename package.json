@@ -1,0 +1,24 @@
+{
+  "name": "decor-ops-backend",
+  "version": "1.0.0",
+  "description": "Backend for the Decor Ops mobile app (inventory, labor, attendance, vehicles).",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "seed:owner": "node bin/seed-owner.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^12.11.1",
+    "cors": "^2.8.5",
+    "csv-parse": "^5.5.6",
+    "csv-stringify": "^6.5.0",
+    "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "firebase-admin": "^12.7.0"
+  }
+}
