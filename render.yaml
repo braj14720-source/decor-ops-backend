@@ -20,6 +20,14 @@ services:
         value: /var/data/decorops.db
       - key: PORT
         value: "10000"
+      # Optional — if set, the server auto-creates this owner on first boot
+      # when no users exist. Remove or change later from the Render dashboard.
+      # - key: BOOTSTRAP_OWNER_EMAIL
+      #   value: "you@yourcompany.com"
+      # - key: BOOTSTRAP_OWNER_PASSWORD
+      #   value: "Strong#123"
+      # - key: BOOTSTRAP_OWNER_NAME
+      #   value: "Your Name"
     disk:
       name: decorops-data
       mountPath: /var/data

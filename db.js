@@ -8,6 +8,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const bcrypt = require('bcryptjs');
 const Database = require('better-sqlite3');
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data', 'decorops.db');
@@ -40,6 +41,30 @@ const invCols = db.prepare("PRAGMA table_info(inventory)").all().map(c => c.name
 if (!invCols.includes('barcode')) {
   db.exec("ALTER TABLE inventory ADD COLUMN barcode TEXT");
   db.exec("CREATE INDEX IF NOT EXISTS idx_inventory_barcode ON inventory(barcode)");
+}
+
+// Auto-bootstrap: if no users exist AND BOOTSTRAP_OWNER_EMAIL + BOOTSTRAP_OWNER_PASSWORD
+// are set, create that owner automatically. Convenient for one-shot Render deploys.
+const userCount = db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
+if (userCount === 0 &&
+    process.env.BOOTSTRAP_OWNER_EMAIL &&
+    process.env.BOOTSTRAP_OWNER_PASSWORD) {
+  (async () => {
+    try {
+      const hash = await bcrypt.hash(process.env.BOOTSTRAP_OWNER_PASSWORD, 10);
+      db.prepare(
+        'INSERT INTO users (email, password_hash, name, role) VALUES (?, ?, ?, ?)'
+      ).run(
+        process.env.BOOTSTRAP_OWNER_EMAIL.trim().toLowerCase(),
+        hash,
+        (process.env.BOOTSTRAP_OWNER_NAME || 'Owner').trim(),
+        'owner',
+      );
+      console.log(`[bootstrap] Auto-created owner: ${process.env.BOOTSTRAP_OWNER_EMAIL}`);
+    } catch (e) {
+      console.error('[bootstrap] Failed:', e.message);
+    }
+  })();
 }
 
 db.exec(`
