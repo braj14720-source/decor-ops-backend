@@ -134,15 +134,19 @@ function calculate({ total_workers, supervisor_count, num_pm_teams }) {
 // Recompute event totals from source teams + allocations and write back to the
 // event row. Called after any source team or allocation change so the event
 // metadata stays in sync with the underlying data.
+//
+// total_workers   = sum of worker_count across all source teams
+// num_source_teams = count of source team rows
+// num_pm_teams    = total supervisor count across source teams
+//                   (each supervisor becomes a PM lead → one PM team per supervisor).
+//                   Independent of how many supervisor allocations exist; the source-team
+//                   declaration is the source of truth for the reallocation plan.
 function recomputeEventTotals(eventId) {
   const srcTeams = db
     .prepare('SELECT worker_count, supervisor_count FROM event_source_teams WHERE event_id = ?')
     .all(eventId);
   const totalWorkers = srcTeams.reduce((acc, t) => acc + (t.worker_count || 0), 0);
   const totalSupervisors = srcTeams.reduce((acc, t) => acc + (t.supervisor_count || 0), 0);
-  const allocCount = db
-    .prepare("SELECT COUNT(*) AS n FROM event_allocations WHERE event_id = ? AND role = 'supervisor'")
-    .get(eventId).n;
 
   db.prepare(
     `UPDATE events
@@ -151,7 +155,7 @@ function recomputeEventTotals(eventId) {
             num_pm_teams = ?,
             updated_at = datetime('now')
       WHERE id = ?`,
-  ).run(totalWorkers, srcTeams.length, allocCount || totalSupervisors, eventId);
+  ).run(totalWorkers, srcTeams.length, totalSupervisors, eventId);
 }
 
 // ----- events CRUD ----------------------------------------------------------
