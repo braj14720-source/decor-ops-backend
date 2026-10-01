@@ -315,4 +315,83 @@ router.get('/payroll.xlsx', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// --- Events ---
+router.get('/events.csv', (_req, res) => {
+  const items = db
+    .prepare('SELECT * FROM events ORDER BY date DESC, created_at DESC')
+    .all();
+  const rows = items.map((e) => ({
+    id: e.id,
+    name: e.name,
+    date: e.date || '',
+    location: e.location || '',
+    client_name: e.client_name || '',
+    status: e.status,
+    total_workers: e.total_workers,
+    num_source_teams: e.num_source_teams,
+    num_pm_teams: e.num_pm_teams,
+    notes: e.notes || '',
+    created_at: e.created_at,
+  }));
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="events-${ISO_TS}.csv"`);
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(stringify(rows, { header: true }));
+});
+
+router.get('/events.xlsx', async (_req, res, next) => {
+  try {
+    const items = db
+      .prepare('SELECT * FROM events ORDER BY date DESC, created_at DESC')
+      .all();
+    const rows = items.map((e) => ({
+      Name: e.name,
+      Date: e.date || '',
+      Location: e.location || '',
+      Client: e.client_name || '',
+      Status: e.status,
+      'Total Workers': e.total_workers,
+      'Source Teams': e.num_source_teams,
+      'PM Teams': e.num_pm_teams,
+      Notes: e.notes || '',
+      Created: e.created_at,
+    }));
+    const buf = await rowsToXlsx('Events', rows);
+    fileHeaders(res, `events-${ISO_TS}.xlsx`, XLSX_MIME);
+    res.send(Buffer.from(buf));
+  } catch (e) { next(e); }
+});
+
+router.get('/event-allocations.csv', (_req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT a.*,
+              e.name         AS event_name,
+              e.date         AS event_date,
+              l.name         AS labor_name,
+              l.role         AS labor_role,
+              st.name        AS source_team_name
+         FROM event_allocations a
+         JOIN events e ON e.id = a.event_id
+         LEFT JOIN labor l ON l.id = a.labor_id
+         LEFT JOIN event_source_teams st ON st.id = a.source_team_id
+        ORDER BY e.date DESC, a.pm_team ASC, l.name ASC`,
+    )
+    .all();
+  const out = rows.map((r) => ({
+    event: r.event_name,
+    event_date: r.event_date || '',
+    labor: r.labor_name || '',
+    role: r.labor_role || '',
+    source_team: r.source_team_name || '',
+    pm_team: r.pm_team == null ? '' : r.pm_team,
+    alloc_role: r.role,
+    notes: r.notes || '',
+  }));
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="event-allocations-${ISO_TS}.csv"`);
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(stringify(out, { header: true }));
+});
+
 module.exports = router;

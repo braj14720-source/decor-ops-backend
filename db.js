@@ -138,6 +138,50 @@ db.exec(`
     created_at   TEXT DEFAULT (datetime('now')),
     updated_at   TEXT DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS events (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    name              TEXT NOT NULL,                 -- e.g. "Wedding — Kumar Family"
+    date              TEXT,                           -- YYYY-MM-DD
+    location          TEXT,
+    client_name       TEXT,
+    status            TEXT DEFAULT 'planning',       -- planning|active|completed|cancelled
+    total_workers     INTEGER DEFAULT 0,
+    num_source_teams  INTEGER DEFAULT 0,
+    num_pm_teams      INTEGER DEFAULT 0,
+    notes             TEXT,
+    created_at        TEXT DEFAULT (datetime('now')),
+    updated_at        TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS event_source_teams (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id         INTEGER NOT NULL,
+    name             TEXT NOT NULL,                  -- e.g. "Rahul's Team"
+    worker_count     INTEGER NOT NULL DEFAULT 0,
+    supervisor_count INTEGER NOT NULL DEFAULT 0,
+    created_at       TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS event_allocations (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id       INTEGER NOT NULL,
+    labor_id       INTEGER NOT NULL,
+    source_team_id INTEGER,
+    pm_team        INTEGER,                          -- 1..N
+    role           TEXT DEFAULT 'worker',            -- worker|supervisor
+    notes          TEXT,
+    created_at     TEXT DEFAULT (datetime('now')),
+    UNIQUE(event_id, labor_id),
+    FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+    FOREIGN KEY (labor_id) REFERENCES labor(id) ON DELETE CASCADE,
+    FOREIGN KEY (source_team_id) REFERENCES event_source_teams(id) ON DELETE SET NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_event_alloc_event ON event_allocations(event_id);
+  CREATE INDEX IF NOT EXISTS idx_event_alloc_pm    ON event_allocations(event_id, pm_team);
+  CREATE INDEX IF NOT EXISTS idx_event_src_team    ON event_source_teams(event_id);
 `);
 
 // Defensive migration: add `barcode` column to inventory (for pre-existing DBs that
