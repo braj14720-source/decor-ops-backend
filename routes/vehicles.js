@@ -12,74 +12,79 @@ const STATUSES = new Set(['pending', 'in_transit', 'completed']);
 function row(payload) {
   let status = payload.status ? String(payload.status).toLowerCase() : 'pending';
   if (!STATUSES.has(status)) status = 'pending';
-  return {
-    vehicle_no: String(payload.vehicle_no || '').trim(),
-    driver_name: payload.driver_name ? String(payload.driver_name).trim() : null,
-    from_location: payload.from_location ? String(payload.from_location).trim() : null,
-    to_location: payload.to_location ? String(payload.to_location).trim() : null,
-    purpose: payload.purpose ? String(payload.purpose).trim() : null,
+  return [
+    String(payload.vehicle_no || '').trim(),
+    payload.driver_name ? String(payload.driver_name).trim() : null,
+    payload.from_location ? String(payload.from_location).trim() : null,
+    payload.to_location ? String(payload.to_location).trim() : null,
+    payload.purpose ? String(payload.purpose).trim() : null,
     status,
-    departed_at: payload.departed_at || null,
-    arrived_at: payload.arrived_at || null,
-    notes: payload.notes ? String(payload.notes).trim() : null,
-  };
+    payload.departed_at || null,
+    payload.arrived_at || null,
+    payload.notes ? String(payload.notes).trim() : null,
+  ];
 }
 
-router.get('/', (req, res) => {
-  const items = db
-    .prepare('SELECT * FROM vehicles ORDER BY datetime(updated_at) DESC, id DESC')
-    .all();
-  res.json({ items });
+router.get('/', async (_req, res, next) => {
+  try {
+    const items = await db.all('SELECT * FROM vehicles ORDER BY datetime(updated_at) DESC, id DESC');
+    res.json({ items });
+  } catch (e) { next(e); }
 });
 
-router.post('/', requireRole('owner'), (req, res) => {
-  const r = row(req.body);
-  if (!r.vehicle_no) return res.status(400).json({ error: 'vehicle_no is required' });
-  const info = db
-    .prepare(
+router.post('/', requireRole('owner'), async (req, res, next) => {
+  try {
+    const r = row(req.body);
+    if (!r[0]) return res.status(400).json({ error: 'vehicle_no is required' });
+    const info = await db.run(
       `INSERT INTO vehicles (vehicle_no, driver_name, from_location, to_location,
                              purpose, status, departed_at, arrived_at, notes)
-       VALUES (@vehicle_no, @driver_name, @from_location, @to_location,
-               @purpose, @status, @departed_at, @arrived_at, @notes)`
-    )
-    .run(r);
-  const item = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(info.lastInsertRowid);
-  res.status(201).json({ item });
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      r,
+    );
+    const item = await db.get('SELECT * FROM vehicles WHERE id = ?', [info.lastInsertRowid]);
+    res.status(201).json({ item });
+  } catch (e) { next(e); }
 });
 
-router.put('/:id', requireRole('owner'), (req, res) => {
-  const id = Number(req.params.id);
-  const existing = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(id);
-  if (!existing) return res.status(404).json({ error: 'Not found' });
-  const r = row({ ...existing, ...req.body });
-  db.prepare(
-    `UPDATE vehicles SET
-       vehicle_no=@vehicle_no, driver_name=@driver_name,
-       from_location=@from_location, to_location=@to_location,
-       purpose=@purpose, status=@status,
-       departed_at=@departed_at, arrived_at=@arrived_at,
-       notes=@notes, updated_at=datetime('now')
-     WHERE id=@id`
-  ).run({ ...r, id });
-  const item = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(id);
+router.put('/:id', requireRole('owner'), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const existing = await db.get('SELECT * FROM vehicles WHERE id = ?', [id]);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    const r = row({ ...existing, ...req.body });
+    await db.run(
+      `UPDATE vehicles SET
+         vehicle_no=?, driver_name=?,
+         from_location=?, to_location=?,
+         purpose=?, status=?,
+         departed_at=?, arrived_at=?,
+         notes=?, updated_at=datetime('now')
+       WHERE id=?`,
+      [...r, id],
+    );
+    const item = await db.get('SELECT * FROM vehicles WHERE id = ?', [id]);
 
-  // Notify all owners when a trip transitions to "completed".
-  if (existing.status !== 'completed' && r.status === 'completed') {
-    const route = `${r.from_location || '—'} → ${r.to_location || '—'}`;
-    push.sendToAllOwners({
-      title: `Trip completed: ${r.vehicle_no}`,
-      body: `${route}${r.driver_name ? ` · ${r.driver_name}` : ''}`,
-      data: { type: 'trip_completed', vehicle_id: String(id), vehicle_no: r.vehicle_no },
-    }).catch(() => {});
-  }
+    // Notify all owners when a trip transitions to "completed".
+    if (existing.status !== 'completed' && r[5] === 'completed') {
+      const route = `${r[2] || '—'} → ${r[3] || '—'}`;
+      push.sendToAllOwners({
+        title: `Trip completed: ${r[0]}`,
+        body: `${route}${r[1] ? ` · ${r[1]}` : ''}`,
+        data: { type: 'trip_completed', vehicle_id: String(id), vehicle_no: r[0] },
+      }).catch(() => {});
+    }
 
-  res.json({ item });
+    res.json({ item });
+  } catch (e) { next(e); }
 });
 
-router.delete('/:id', requireRole('owner'), (req, res) => {
-  const info = db.prepare('DELETE FROM vehicles WHERE id = ?').run(Number(req.params.id));
-  if (!info.changes) return res.status(404).json({ error: 'Not found' });
-  res.json({ ok: true });
+router.delete('/:id', requireRole('owner'), async (req, res, next) => {
+  try {
+    const info = await db.run('DELETE FROM vehicles WHERE id = ?', [Number(req.params.id)]);
+    if (!info.changes) return res.status(404).json({ error: 'Not found' });
+    res.json({ ok: true });
+  } catch (e) { next(e); }
 });
 
 module.exports = router;

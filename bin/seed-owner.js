@@ -24,40 +24,45 @@ function parseArgs() {
   return out;
 }
 
-const args = parseArgs();
-const email = (args.email || '').toString().trim().toLowerCase();
-const password = (args.password || '').toString();
-const name = (args.name || '').toString().trim();
-
-if (!email || !password || !name) {
-  console.error('Usage: node bin/seed-owner.js --email <e> --password <p> --name "<n>"');
-  process.exit(1);
-}
-if (password.length < 6) {
-  console.error('Password must be at least 6 characters.');
-  process.exit(1);
-}
-
-const ownerCount = db
-  .prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'owner' AND active = 1")
-  .get().n;
-if (ownerCount > 0) {
-  console.error(`Refusing to seed: ${ownerCount} active owner(s) already exist.`);
-  console.error('Have an existing owner create new accounts via the admin UI (POST /api/users).');
-  process.exit(1);
-}
-
-const exists = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
-if (exists) {
-  console.error(`A user with email ${email} already exists.`);
-  process.exit(1);
-}
-
 (async () => {
+  const args = parseArgs();
+  const email = (args.email || '').toString().trim().toLowerCase();
+  const password = (args.password || '').toString();
+  const name = (args.name || '').toString().trim();
+
+  if (!email || !password || !name) {
+    console.error('Usage: node bin/seed-owner.js --email <e> --password <p> --name "<n>"');
+    process.exit(1);
+  }
+  if (password.length < 6) {
+    console.error('Password must be at least 6 characters.');
+    process.exit(1);
+  }
+
+  await db.ready;
+
+  const ownerRow = await db.get(
+    "SELECT COUNT(*) AS n FROM users WHERE role = 'owner' AND active = 1",
+  );
+  const ownerCount = ownerRow ? Number(ownerRow.n) : 0;
+  if (ownerCount > 0) {
+    console.error(`Refusing to seed: ${ownerCount} active owner(s) already exist.`);
+    console.error('Have an existing owner create new accounts via the admin UI (POST /api/users).');
+    process.exit(1);
+  }
+
+  const exists = await db.get('SELECT id FROM users WHERE email = ?', [email]);
+  if (exists) {
+    console.error(`A user with email ${email} already exists.`);
+    process.exit(1);
+  }
+
   const hash = await bcrypt.hash(password, 10);
-  const info = db
-    .prepare('INSERT INTO users (email, password_hash, name, role) VALUES (?, ?, ?, ?)')
-    .run(email, hash, name, 'owner');
+  const info = await db.run(
+    'INSERT INTO users (email, password_hash, name, role) VALUES (?, ?, ?, ?)',
+    [email, hash, name, 'owner'],
+  );
   console.log(`✔ Created owner #${info.lastInsertRowid}: ${email} (${name})`);
   console.log('Log in with those credentials, then create more users from the Team screen.');
+  process.exit(0);
 })();

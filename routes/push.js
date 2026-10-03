@@ -10,31 +10,36 @@ router.use(authRequired);
 const TOKEN_RE = /^[A-Za-z0-9_\-:]{20,}$/;
 
 // POST /api/push/register { token, platform }
-router.post('/register', requireRole('owner'), (req, res) => {
-  const { token, platform } = req.body || {};
-  if (!token || !TOKEN_RE.test(token)) {
-    return res.status(400).json({ error: 'invalid token' });
-  }
-  const p = (platform || '').toString().slice(0, 16) || null;
+router.post('/register', requireRole('owner'), async (req, res, next) => {
+  try {
+    const { token, platform } = req.body || {};
+    if (!token || !TOKEN_RE.test(token)) {
+      return res.status(400).json({ error: 'invalid token' });
+    }
+    const p = (platform || '').toString().slice(0, 16) || null;
 
-  // Upsert — if the token existed for a different user, move it; else update.
-  db.prepare(
-    `INSERT INTO device_tokens (user_id, token, platform, last_seen_at)
-     VALUES (?, ?, ?, datetime('now'))
-     ON CONFLICT(token) DO UPDATE SET
-       user_id = excluded.user_id,
-       platform = excluded.platform,
-       last_seen_at = datetime('now')`
-  ).run(req.user.id, token, p);
-  res.json({ ok: true, enabled: push.enabled() });
+    // Upsert — if the token existed for a different user, move it; else update.
+    await db.run(
+      `INSERT INTO device_tokens (user_id, token, platform, last_seen_at)
+       VALUES (?, ?, ?, datetime('now'))
+       ON CONFLICT(token) DO UPDATE SET
+         user_id = excluded.user_id,
+         platform = excluded.platform,
+         last_seen_at = datetime('now')`,
+      [req.user.id, token, p],
+    );
+    res.json({ ok: true, enabled: push.enabled() });
+  } catch (e) { next(e); }
 });
 
 // DELETE /api/push/register  { token }
-router.delete('/register', requireRole('owner'), (req, res) => {
-  const token = (req.body && req.body.token) || req.query.token;
-  if (!token) return res.status(400).json({ error: 'token required' });
-  db.prepare('DELETE FROM device_tokens WHERE token = ? AND user_id = ?').run(token, req.user.id);
-  res.json({ ok: true });
+router.delete('/register', requireRole('owner'), async (req, res, next) => {
+  try {
+    const token = (req.body && req.body.token) || req.query.token;
+    if (!token) return res.status(400).json({ error: 'token required' });
+    await db.run('DELETE FROM device_tokens WHERE token = ? AND user_id = ?', [token, req.user.id]);
+    res.json({ ok: true });
+  } catch (e) { next(e); }
 });
 
 // GET /api/push/status — surfaces whether the backend has FCM configured.

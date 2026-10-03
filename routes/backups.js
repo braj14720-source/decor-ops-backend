@@ -1,22 +1,16 @@
-// routes/backups.js — local DB snapshotting + optional S3-compatible remote backup.
+// routes/backups.js — DB snapshotting (SQL dump) + optional S3-compatible remote backup.
 // Owner-only writes; anyone authed can list/download.
 //
 // Usage:
 //   node bin/backup-now.js                       # manual snapshot
 //   GET  /api/backups                             # list
-//   GET  /api/backups/:id/download               # stream the .db file
+//   GET  /api/backups/:id/download               # stream the .sql file
 //   POST /api/backups                             # create snapshot now
 //   DELETE /api/backups/:id                       # remove a snapshot
 //
-// Optional S3 upload (AWS S3 / Backblaze B2 / MinIO / any S3-compatible):
-//   BACKUP_S3_ENDPOINT=https://s3.us-west-002.backblazeb2.com
-//   BACKUP_S3_BUCKET=my-bucket
-//   BACKUP_S3_ACCESS_KEY=...
-//   BACKUP_S3_SECRET_KEY=...
-//   BACKUP_S3_REGION=us-west-002        # optional, defaults to us-east-1
-//   BACKUP_S3_PREFIX=backups/           # optional, key prefix
-//
-// When set, every new backup is uploaded after the local snapshot succeeds.
+// Note: now backed by libSQL. The "snapshot" is a SQL text dump of every row
+// in every table — portable, restorable with `sqlite3 db.db < snapshot.sql`,
+// and works for both local file: and remote Turso DBs.
 
 const express = require('express');
 const path = require('path');
@@ -28,8 +22,7 @@ const db = require('../db');
 const router = express.Router();
 router.use(authRequired);
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'decorops.db');
-const BACKUP_DIR = path.join(path.dirname(DB_PATH), 'backups');
+const BACKUP_DIR = path.join(__dirname, '..', 'data', 'backups');
 fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
 const S3_CFG = (() => {
@@ -111,31 +104,72 @@ async function uploadToS3(key, body) {
   return { key: fullKey, bucket, endpoint };
 }
 
-// SQLite-safe snapshot via the backup API.
-function snapshotDb(targetPath) {
-  // Make sure pending writes are flushed
-  db.pragma('wal_checkpoint(TRUNCATE)');
-  // better-sqlite3's backup() streams a consistent snapshot
-  return new Promise((resolve, reject) => {
+// ---- SQL dump ----
+// Dumps every row from every user table as INSERT statements. Portable to any
+// sqlite/libsql-compatible DB. Used for both local file backups and S3 remote.
+const TABLES_TO_DUMP = [
+  'users',
+  'inventory',
+  'labor',
+  'attendance',
+  'vehicles',
+  'events',
+  'event_source_teams',
+  'event_allocations',
+  'user_settings',
+  'device_tokens',
+];
+
+function escapeSqlValue(v) {
+  if (v === null || v === undefined) return 'NULL';
+  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : 'NULL';
+  if (typeof v === 'boolean') return v ? '1' : '0';
+  // String
+  return `'${String(v).replace(/'/g, "''")}'`;
+}
+
+async function snapshotDb(targetPath) {
+  // Wait for db init to complete (in case request races startup)
+  await db.ready;
+
+  const out = [];
+  out.push(`-- Decor Ops SQL snapshot`);
+  out.push(`-- Generated: ${new Date().toISOString()}`);
+  out.push(`-- Source: ${process.env.DB_URL || process.env.TURSO_DATABASE_URL || 'local'}`);
+  out.push('BEGIN;');
+
+  for (const table of TABLES_TO_DUMP) {
+    let rows;
     try {
-      db.backup(targetPath)
-        .then(() => resolve())
-        .catch(reject);
+      rows = await db.all(`SELECT * FROM ${table}`);
     } catch (e) {
-      reject(e);
+      out.push(`-- (skip ${table}: ${e.message})`);
+      continue;
     }
-  });
+    if (!rows.length) continue;
+    out.push(`-- Table: ${table} (${rows.length} rows)`);
+    const cols = Object.keys(rows[0]);
+    const colList = cols.join(', ');
+    for (const row of rows) {
+      const values = cols.map((c) => escapeSqlValue(row[c])).join(', ');
+      out.push(`INSERT INTO ${table} (${colList}) VALUES (${values});`);
+    }
+  }
+  out.push('COMMIT;');
+  out.push('');
+
+  fs.writeFileSync(targetPath, out.join('\n'), 'utf8');
 }
 
 function listBackups() {
   if (!fs.existsSync(BACKUP_DIR)) return [];
   return fs.readdirSync(BACKUP_DIR)
-    .filter((f) => f.endsWith('.db'))
+    .filter((f) => f.endsWith('.sql'))
     .map((filename) => {
       const fullPath = path.join(BACKUP_DIR, filename);
       const stat = fs.statSync(fullPath);
       return {
-        id: filename.replace(/\.db$/, ''),
+        id: filename.replace(/\.sql$/, ''),
         filename,
         size_bytes: stat.size,
         created_at: stat.mtime.toISOString(),
@@ -146,7 +180,7 @@ function listBackups() {
 
 async function createBackup({ upload } = {}) {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const filename = `decorops-${stamp}.db`;
+  const filename = `decorops-${stamp}.sql`;
   const targetPath = path.join(BACKUP_DIR, filename);
 
   await snapshotDb(targetPath);
@@ -157,13 +191,12 @@ async function createBackup({ upload } = {}) {
     try {
       remote = await uploadToS3(filename, fs.readFileSync(targetPath));
     } catch (e) {
-      // Don't fail the local backup if remote upload fails — log it instead.
       remote = { error: e.message };
     }
   }
 
   return {
-    id: filename.replace(/\.db$/, ''),
+    id: filename.replace(/\.sql$/, ''),
     filename,
     size_bytes: stat.size,
     created_at: stat.mtime.toISOString(),
@@ -191,23 +224,22 @@ router.post('/', requireRole('owner'), async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// GET /api/backups/:id/download — stream the .db file
+// GET /api/backups/:id/download — stream the .sql file
 router.get('/:id/download', (req, res) => {
-  const filename = req.params.id.endsWith('.db') ? req.params.id : `${req.params.id}.db`;
-  // Path traversal guard
+  const filename = req.params.id.endsWith('.sql') ? req.params.id : `${req.params.id}.sql`;
   if (filename.includes('/') || filename.includes('..')) {
     return res.status(400).json({ error: 'invalid id' });
   }
   const fullPath = path.join(BACKUP_DIR, filename);
   if (!fs.existsSync(fullPath)) return res.status(404).json({ error: 'not found' });
-  res.setHeader('Content-Type', 'application/octet-stream');
+  res.setHeader('Content-Type', 'application/sql');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   fs.createReadStream(fullPath).pipe(res);
 });
 
 // DELETE /api/backups/:id
 router.delete('/:id', requireRole('owner'), (req, res) => {
-  const filename = req.params.id.endsWith('.db') ? req.params.id : `${req.params.id}.db`;
+  const filename = req.params.id.endsWith('.sql') ? req.params.id : `${req.params.id}.sql`;
   if (filename.includes('/') || filename.includes('..')) {
     return res.status(400).json({ error: 'invalid id' });
   }

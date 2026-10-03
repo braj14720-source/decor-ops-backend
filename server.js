@@ -3,7 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 
-require('./db'); // initialize SQLite schema
+const db = require('./db'); // initialize libSQL/Turso connection + schema
 
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
@@ -43,6 +43,12 @@ app.use((err, _req, res, _next) => {
 });
 
 const PORT = Number(process.env.PORT || 4000);
-app.listen(PORT, () => {
-  console.log(`Decor Ops API running on http://localhost:${PORT}`);
-});
+
+// Wait for db init to finish before accepting requests — avoids race between
+// schema migrations and the first request hitting an empty DB.
+(async () => {
+  await db.ready;
+  app.listen(PORT, () => {
+    console.log(`Decor Ops API running on http://localhost:${PORT}`);
+  });
+})();

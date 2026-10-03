@@ -7,55 +7,61 @@ const router = express.Router();
 router.use(authRequired);
 
 function row(payload) {
-  return {
-    name: String(payload.name || '').trim(),
-    role: payload.role ? String(payload.role).trim() : null,
-    phone: payload.phone ? String(payload.phone).trim() : null,
-    daily_wage: Number(payload.daily_wage ?? 0),
-    active: payload.active === undefined ? 1 : payload.active ? 1 : 0,
-    notes: payload.notes ? String(payload.notes).trim() : null,
-  };
+  return [
+    String(payload.name || '').trim(),
+    payload.role ? String(payload.role).trim() : null,
+    payload.phone ? String(payload.phone).trim() : null,
+    Number(payload.daily_wage ?? 0),
+    payload.active === undefined ? 1 : (payload.active ? 1 : 0),
+    payload.notes ? String(payload.notes).trim() : null,
+  ];
 }
 
-router.get('/', (req, res) => {
-  const items = db
-    .prepare('SELECT * FROM labor ORDER BY active DESC, name ASC')
-    .all();
-  res.json({ items });
+router.get('/', async (_req, res, next) => {
+  try {
+    const items = await db.all('SELECT * FROM labor ORDER BY active DESC, name ASC');
+    res.json({ items });
+  } catch (e) { next(e); }
 });
 
-router.post('/', requireRole('owner'), (req, res) => {
-  const r = row(req.body);
-  if (!r.name) return res.status(400).json({ error: 'name is required' });
-  const info = db
-    .prepare(
+router.post('/', requireRole('owner'), async (req, res, next) => {
+  try {
+    const r = row(req.body);
+    if (!r[0]) return res.status(400).json({ error: 'name is required' });
+    const info = await db.run(
       `INSERT INTO labor (name, role, phone, daily_wage, active, notes)
-       VALUES (@name, @role, @phone, @daily_wage, @active, @notes)`
-    )
-    .run(r);
-  const item = db.prepare('SELECT * FROM labor WHERE id = ?').get(info.lastInsertRowid);
-  res.status(201).json({ item });
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      r,
+    );
+    const item = await db.get('SELECT * FROM labor WHERE id = ?', [info.lastInsertRowid]);
+    res.status(201).json({ item });
+  } catch (e) { next(e); }
 });
 
-router.put('/:id', requireRole('owner'), (req, res) => {
-  const id = Number(req.params.id);
-  const existing = db.prepare('SELECT * FROM labor WHERE id = ?').get(id);
-  if (!existing) return res.status(404).json({ error: 'Not found' });
-  const r = row({ ...existing, ...req.body });
-  db.prepare(
-    `UPDATE labor SET
-       name=@name, role=@role, phone=@phone, daily_wage=@daily_wage,
-       active=@active, notes=@notes, updated_at=datetime('now')
-     WHERE id=@id`
-  ).run({ ...r, id });
-  const item = db.prepare('SELECT * FROM labor WHERE id = ?').get(id);
-  res.json({ item });
+router.put('/:id', requireRole('owner'), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const existing = await db.get('SELECT * FROM labor WHERE id = ?', [id]);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    const r = row({ ...existing, ...req.body });
+    await db.run(
+      `UPDATE labor SET
+         name=?, role=?, phone=?, daily_wage=?,
+         active=?, notes=?, updated_at=datetime('now')
+       WHERE id=?`,
+      [...r, id],
+    );
+    const item = await db.get('SELECT * FROM labor WHERE id = ?', [id]);
+    res.json({ item });
+  } catch (e) { next(e); }
 });
 
-router.delete('/:id', requireRole('owner'), (req, res) => {
-  const info = db.prepare('DELETE FROM labor WHERE id = ?').run(Number(req.params.id));
-  if (!info.changes) return res.status(404).json({ error: 'Not found' });
-  res.json({ ok: true });
+router.delete('/:id', requireRole('owner'), async (req, res, next) => {
+  try {
+    const info = await db.run('DELETE FROM labor WHERE id = ?', [Number(req.params.id)]);
+    if (!info.changes) return res.status(404).json({ error: 'Not found' });
+    res.json({ ok: true });
+  } catch (e) { next(e); }
 });
 
 module.exports = router;

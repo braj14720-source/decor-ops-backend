@@ -49,14 +49,15 @@ function init() {
 }
 
 // Send a notification to every device registered for the given user.
-// Returns { sent, failed, skipped } — `skipped` is true if Firebase isn't set up.
 async function sendToUser(userId, { title, body, data = {} }) {
   init();
   if (!_enabled) return { skipped: true, sent: 0, failed: 0 };
 
-  const tokens = db
-    .prepare('SELECT id, token FROM device_tokens WHERE user_id = ?')
-    .all(userId);
+  await db.ready;
+  const tokens = await db.all(
+    'SELECT id, token FROM device_tokens WHERE user_id = ?',
+    [userId],
+  );
 
   if (!tokens.length) return { skipped: false, sent: 0, failed: 0 };
 
@@ -94,7 +95,7 @@ async function sendToUser(userId, { title, body, data = {} }) {
     });
     if (stale.length) {
       const placeholders = stale.map(() => '?').join(',');
-      db.prepare(`DELETE FROM device_tokens WHERE id IN (${placeholders})`).run(...stale);
+      await db.run(`DELETE FROM device_tokens WHERE id IN (${placeholders})`, stale);
     }
     return { skipped: false, sent: res.successCount, failed: res.failureCount };
   } catch (e) {
@@ -106,9 +107,10 @@ async function sendToUser(userId, { title, body, data = {} }) {
 // Send to every active owner in the system — used for shop-wide alerts
 // (e.g. a worker just marked a trip completed).
 async function sendToAllOwners({ title, body, data = {} }) {
-  const owners = db
-    .prepare("SELECT id FROM users WHERE role = 'owner' AND active = 1")
-    .all();
+  await db.ready;
+  const owners = await db.all(
+    "SELECT id FROM users WHERE role = 'owner' AND active = 1",
+  );
   let totalSent = 0;
   for (const o of owners) {
     const r = await sendToUser(o.id, { title, body, data });
