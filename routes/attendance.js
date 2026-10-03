@@ -1,7 +1,7 @@
 // routes/attendance.js — daily attendance + auto-calculated salary.
 const express = require('express');
 const db = require('../db');
-const { authRequired, requireRole } = require('../middleware/auth');
+const { authRequired, requireWrite } = require('../middleware/auth');
 const push = require('../services/push');
 
 const router = express.Router();
@@ -44,7 +44,7 @@ router.get('/', async (req, res, next) => {
 });
 
 // POST /api/attendance  { labor_id, date, status, overtime_hours, notes }
-router.post('/', requireRole('owner'), async (req, res, next) => {
+router.post('/', requireWrite, async (req, res, next) => {
   try {
     const r = row(req.body);
     if (!r[0] || !r[1]) return res.status(400).json({ error: 'labor_id and date are required' });
@@ -76,9 +76,9 @@ router.post('/', requireRole('owner'), async (req, res, next) => {
       [r[0], r[1]],
     );
 
-    // Notify owners when a worker (not an owner) marks attendance.
-    // Skip when the actor themselves is an owner (they don't need a self-ping).
-    if (req.user.role === 'worker') {
+    // Notify super admins when a non-super-admin marks attendance.
+    // Skip when the actor themselves is a super admin (they don't need a self-ping).
+    if (req.user.role !== 'super_admin') {
       const statusLabel = r[2] === 'present' ? 'Present'
         : r[2] === 'half_day' ? '½ day' : 'Absent';
       const ot = r[3] > 0 ? ` (+${r[3]}h OT)` : '';

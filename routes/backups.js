@@ -16,7 +16,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { authRequired, requireRole } = require('../middleware/auth');
+const { authRequired, requireSuperAdmin } = require('../middleware/auth');
 const db = require('../db');
 
 const router = express.Router();
@@ -213,7 +213,7 @@ router.get('/', (_req, res) => {
 });
 
 // POST /api/backups — create a new snapshot. Body: { upload?: bool }
-router.post('/', requireRole('owner'), async (req, res, next) => {
+router.post('/', requireSuperAdmin, async (req, res, next) => {
   try {
     const wantUpload = !!(req.body && req.body.upload) && s3Enabled();
     if ((req.body && req.body.upload) && !s3Enabled()) {
@@ -238,7 +238,7 @@ router.get('/:id/download', (req, res) => {
 });
 
 // DELETE /api/backups/:id
-router.delete('/:id', requireRole('owner'), (req, res) => {
+router.delete('/:id', requireSuperAdmin, (req, res) => {
   const filename = req.params.id.endsWith('.sql') ? req.params.id : `${req.params.id}.sql`;
   if (filename.includes('/') || filename.includes('..')) {
     return res.status(400).json({ error: 'invalid id' });

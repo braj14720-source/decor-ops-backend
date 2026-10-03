@@ -42,7 +42,7 @@ function parseArgs() {
   await db.ready;
 
   const ownerRow = await db.get(
-    "SELECT COUNT(*) AS n FROM users WHERE role = 'owner' AND active = 1",
+    "SELECT COUNT(*) AS n FROM users WHERE role = 'super_admin' AND active = 1",
   );
   const ownerCount = ownerRow ? Number(ownerRow.n) : 0;
   if (ownerCount > 0) {
@@ -60,7 +60,7 @@ function parseArgs() {
   const hash = await bcrypt.hash(password, 10);
   const info = await db.run(
     'INSERT INTO users (email, password_hash, name, role) VALUES (?, ?, ?, ?)',
-    [email, hash, name, 'owner'],
+    [email, hash, name, 'super_admin'],
   );
   console.log(`✔ Created owner #${info.lastInsertRowid}: ${email} (${name})`);
   console.log('Log in with those credentials, then create more users from the Team screen.');

@@ -2,7 +2,7 @@
 const express = require('express');
 const { parse } = require('csv-parse/sync');
 const db = require('../db');
-const { authRequired, requireRole } = require('../middleware/auth');
+const { authRequired, requireWrite } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(authRequired);
@@ -121,7 +121,7 @@ async function fetchSheetCsv(rawUrl) {
   return { url, text: buf.toString('utf8') };
 }
 
-router.post('/inventory/preview', requireRole('owner'), async (req, res, next) => {
+router.post('/inventory/preview', requireWrite, async (req, res, next) => {
   try {
     const { url } = req.body || {};
     const { url: finalUrl, text } = await fetchSheetCsv(url);
@@ -136,7 +136,7 @@ router.post('/inventory/preview', requireRole('owner'), async (req, res, next) =
   } catch (e) { next(e); }
 });
 
-router.post('/inventory/confirm', requireRole('owner'), async (req, res, next) => {
+router.post('/inventory/confirm', requireWrite, async (req, res, next) => {
   try {
     const { url } = req.body || {};
     const { text } = await fetchSheetCsv(url);

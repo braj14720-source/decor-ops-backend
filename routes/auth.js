@@ -64,7 +64,7 @@ router.post('/signup', async (req, res, next) => {
     const hash = await bcrypt.hash(password, 10);
     const info = await db.run(
       'INSERT INTO users (email, password_hash, name, role) VALUES (?, ?, ?, ?)',
-      [normalizedEmail, hash, name, 'worker'],
+      [normalizedEmail, hash, name, 'employee'],
     );
     const user = await db.get('SELECT * FROM users WHERE id = ?', [info.lastInsertRowid]);
     const token = signToken(user);

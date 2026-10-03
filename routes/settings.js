@@ -1,7 +1,7 @@
 // routes/settings.js — per-user notification + alert preferences.
 const express = require('express');
 const db = require('../db');
-const { authRequired, requireRole } = require('../middleware/auth');
+const { authRequired, requireSuperAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(authRequired);
@@ -34,7 +34,7 @@ router.get('/', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.put('/', requireRole('owner'), async (req, res, next) => {
+router.put('/', requireSuperAdmin, async (req, res, next) => {
   try {
     await ensureRow(req.user.id);
     const b = req.body || {};

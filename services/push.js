@@ -104,12 +104,12 @@ async function sendToUser(userId, { title, body, data = {} }) {
   }
 }
 
-// Send to every active owner in the system — used for shop-wide alerts
-// (e.g. a worker just marked a trip completed).
+// Send to every active super admin in the system — used for shop-wide alerts
+// (e.g. an employee just marked a trip completed).
 async function sendToAllOwners({ title, body, data = {} }) {
   await db.ready;
   const owners = await db.all(
-    "SELECT id FROM users WHERE role = 'owner' AND active = 1",
+    "SELECT id FROM users WHERE role = 'super_admin' AND active = 1",
   );
   let totalSent = 0;
   for (const o of owners) {

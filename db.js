@@ -95,7 +95,8 @@ CREATE TABLE IF NOT EXISTS users (
   email         TEXT    UNIQUE NOT NULL,
   password_hash TEXT    NOT NULL,
   name          TEXT    NOT NULL,
-  role          TEXT    NOT NULL CHECK (role IN ('owner','worker')) DEFAULT 'owner',
+  role          TEXT    NOT NULL CHECK (role IN ('super_admin','admin','employee','in_house_labour')) DEFAULT 'employee',
+  designation   TEXT,                                   -- job role label, e.g. "Operations Manager", "Stage Crew Lead"
   active        INTEGER NOT NULL DEFAULT 1,
   created_at    TEXT    DEFAULT (datetime('now'))
 );
@@ -219,6 +220,62 @@ CREATE INDEX IF NOT EXISTS idx_event_src_team    ON event_source_teams(event_id)
 CREATE INDEX IF NOT EXISTS idx_inventory_barcode ON inventory(barcode);
 `;
 
+// ---- defensive user-table migrations ----------------------------------------
+// Runs after CREATE TABLE statements. For existing DBs, this:
+//   - adds the `designation` column (new in the super_admin era)
+//   - rewrites 'owner' → 'super_admin' and 'worker' → 'employee'
+//   - rebuilds the users table if the old CHECK constraint is still active,
+//     so new roles like 'in_house_labour' can be inserted
+async function runUserMigrations() {
+  const cols = await all("SELECT name FROM pragma_table_info('users')");
+  const colNames = cols.map((c) => c.name);
+  if (!colNames.includes('designation')) {
+    await client.execute('ALTER TABLE users ADD COLUMN designation TEXT');
+  }
+
+  // Safe to run repeatedly — only touches old values.
+  await client.execute("UPDATE users SET role = 'super_admin' WHERE role = 'owner'");
+  await client.execute("UPDATE users SET role = 'employee'    WHERE role = 'worker'");
+
+  const defnRow = await get(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'",
+  );
+  const defn = defnRow ? defnRow.sql : '';
+  const allowsNewRoles =
+    defn.includes("'super_admin'") && defn.includes("'in_house_labour'");
+  if (!allowsNewRoles) {
+    // Rebuild the table: rename → create new → copy with role remap → drop old.
+    await client.execute('BEGIN');
+    try {
+      await client.execute('ALTER TABLE users RENAME TO users__legacy');
+      await client.execute(`
+        CREATE TABLE users (
+          id            INTEGER PRIMARY KEY AUTOINCREMENT,
+          email         TEXT    UNIQUE NOT NULL,
+          password_hash TEXT    NOT NULL,
+          name          TEXT    NOT NULL,
+          role          TEXT    NOT NULL CHECK (role IN ('super_admin','admin','employee','in_house_labour')) DEFAULT 'employee',
+          designation   TEXT,
+          active        INTEGER NOT NULL DEFAULT 1,
+          created_at    TEXT    DEFAULT (datetime('now'))
+        )
+      `);
+      await client.execute(
+        "INSERT INTO users (id, email, password_hash, name, role, designation, active, created_at) " +
+        "SELECT id, email, password_hash, name, " +
+        "  CASE role WHEN 'owner' THEN 'super_admin' WHEN 'worker' THEN 'employee' ELSE role END, " +
+        "  designation, active, created_at FROM users__legacy"
+      );
+      await client.execute('DROP TABLE users__legacy');
+      await client.execute('COMMIT');
+      console.log('[db] Migrated users table to super_admin role schema');
+    } catch (e) {
+      try { await client.execute('ROLLBACK'); } catch (_) {}
+      throw e;
+    }
+  }
+}
+
 // ---- bootstrap --------------------------------------------------------------
 
 async function maybeBootstrap() {
@@ -237,10 +294,10 @@ async function maybeBootstrap() {
         process.env.BOOTSTRAP_OWNER_EMAIL.trim().toLowerCase(),
         hash,
         (process.env.BOOTSTRAP_OWNER_NAME || 'Owner').trim(),
-        'owner',
+        'super_admin',
       ],
     );
-    console.log(`[bootstrap] Auto-created owner: ${process.env.BOOTSTRAP_OWNER_EMAIL}`);
+    console.log(`[bootstrap] Auto-created super admin: ${process.env.BOOTSTRAP_OWNER_EMAIL}`);
   } catch (e) {
     console.error('[bootstrap] Failed:', e.message);
   }
@@ -261,6 +318,7 @@ const dbReady = (async () => {
     for (const stmt of statements) {
       await client.execute(stmt);
     }
+    await runUserMigrations();
     await maybeBootstrap();
     const where = DB_URL.startsWith('libsql://') ? 'Turso (remote)' : `local file ${DB_URL}`;
     console.log(`[db] Connected to ${where} (${statements.length} schema stmts)`);

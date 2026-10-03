@@ -1,7 +1,7 @@
 // routes/inventory.js — CRUD for materials.
 const express = require('express');
 const db = require('../db');
-const { authRequired, requireRole } = require('../middleware/auth');
+const { authRequired, requireWrite, requireDelete } = require('../middleware/auth');
 const push = require('../services/push');
 
 const router = express.Router();
@@ -46,7 +46,7 @@ router.get('/by-barcode/:code', async (req, res, next) => {
 });
 
 // POST /api/inventory
-router.post('/', requireRole('owner'), async (req, res, next) => {
+router.post('/', requireWrite, async (req, res, next) => {
   try {
     const r = row(req.body);
     if (!r[0]) return res.status(400).json({ error: 'name is required' });
@@ -64,7 +64,7 @@ router.post('/', requireRole('owner'), async (req, res, next) => {
 });
 
 // PUT /api/inventory/:id
-router.put('/:id', requireRole('owner'), async (req, res, next) => {
+router.put('/:id', requireWrite, async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const existing = await db.get('SELECT * FROM inventory WHERE id = ?', [id]);
@@ -94,7 +94,7 @@ router.put('/:id', requireRole('owner'), async (req, res, next) => {
         const owners = await db.all(
           "SELECT u.id AS user_id, COALESCE(s.low_stock_threshold, 5) AS threshold " +
           "FROM users u LEFT JOIN user_settings s ON s.user_id = u.id " +
-          "WHERE u.role = 'owner' AND u.active = 1",
+          "WHERE u.role = 'super_admin' AND u.active = 1",
         );
         const crossings = owners.filter((o) => existing.quantity > o.threshold && r[3] <= o.threshold);
         if (crossings.length) {
@@ -112,7 +112,7 @@ router.put('/:id', requireRole('owner'), async (req, res, next) => {
 });
 
 // DELETE /api/inventory/:id
-router.delete('/:id', requireRole('owner'), async (req, res, next) => {
+router.delete('/:id', requireDelete, async (req, res, next) => {
   try {
     const info = await db.run('DELETE FROM inventory WHERE id = ?', [Number(req.params.id)]);
     if (!info.changes) return res.status(404).json({ error: 'Not found' });

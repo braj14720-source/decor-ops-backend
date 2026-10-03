@@ -1,7 +1,7 @@
 // routes/push.js — register / unregister FCM device tokens.
 const express = require('express');
 const db = require('../db');
-const { authRequired, requireRole } = require('../middleware/auth');
+const { authRequired, requireSuperAdmin } = require('../middleware/auth');
 const push = require('../services/push');
 
 const router = express.Router();
@@ -10,7 +10,7 @@ router.use(authRequired);
 const TOKEN_RE = /^[A-Za-z0-9_\-:]{20,}$/;
 
 // POST /api/push/register { token, platform }
-router.post('/register', requireRole('owner'), async (req, res, next) => {
+router.post('/register', requireSuperAdmin, async (req, res, next) => {
   try {
     const { token, platform } = req.body || {};
     if (!token || !TOKEN_RE.test(token)) {
@@ -33,7 +33,7 @@ router.post('/register', requireRole('owner'), async (req, res, next) => {
 });
 
 // DELETE /api/push/register  { token }
-router.delete('/register', requireRole('owner'), async (req, res, next) => {
+router.delete('/register', requireSuperAdmin, async (req, res, next) => {
   try {
     const token = (req.body && req.body.token) || req.query.token;
     if (!token) return res.status(400).json({ error: 'token required' });

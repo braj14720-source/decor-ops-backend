@@ -18,7 +18,7 @@
 
 const express = require('express');
 const db = require('../db');
-const { authRequired, requireRole } = require('../middleware/auth');
+const { authRequired, requireWrite, requireDelete } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(authRequired);
@@ -146,7 +146,7 @@ router.get('/', async (_req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post('/', requireRole('owner'), async (req, res, next) => {
+router.post('/', requireWrite, async (req, res, next) => {
   try {
     const r = row(req.body);
     if (!r.name) return res.status(400).json({ error: 'name is required' });
@@ -212,7 +212,7 @@ router.get('/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.put('/:id', requireRole('owner'), async (req, res, next) => {
+router.put('/:id', requireWrite, async (req, res, next) => {
   try {
     const eventId = Number(req.params.id);
     const ev = await db.get('SELECT * FROM events WHERE id = ?', [eventId]);
@@ -233,7 +233,7 @@ router.put('/:id', requireRole('owner'), async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.delete('/:id', requireRole('owner'), async (req, res, next) => {
+router.delete('/:id', requireDelete, async (req, res, next) => {
   try {
     const eventId = Number(req.params.id);
     const ev = await db.get('SELECT * FROM events WHERE id = ?', [eventId]);
@@ -256,7 +256,7 @@ router.get('/:id/source-teams', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post('/:id/source-teams', requireRole('owner'), async (req, res, next) => {
+router.post('/:id/source-teams', requireWrite, async (req, res, next) => {
   try {
     const eventId = Number(req.params.id);
     const ev = await db.get('SELECT id FROM events WHERE id = ?', [eventId]);
@@ -279,7 +279,7 @@ router.post('/:id/source-teams', requireRole('owner'), async (req, res, next) =>
   } catch (e) { next(e); }
 });
 
-router.put('/:id/source-teams/:stid', requireRole('owner'), async (req, res, next) => {
+router.put('/:id/source-teams/:stid', requireWrite, async (req, res, next) => {
   try {
     const eventId = Number(req.params.id);
     const stid = Number(req.params.stid);
@@ -308,7 +308,7 @@ router.put('/:id/source-teams/:stid', requireRole('owner'), async (req, res, nex
   } catch (e) { next(e); }
 });
 
-router.delete('/:id/source-teams/:stid', requireRole('owner'), async (req, res, next) => {
+router.delete('/:id/source-teams/:stid', requireDelete, async (req, res, next) => {
   try {
     const eventId = Number(req.params.id);
     const stid = Number(req.params.stid);
@@ -343,7 +343,7 @@ router.get('/:id/allocations', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post('/:id/allocations', requireRole('owner'), async (req, res, next) => {
+router.post('/:id/allocations', requireWrite, async (req, res, next) => {
   try {
     const eventId = Number(req.params.id);
     const ev = await db.get('SELECT id FROM events WHERE id = ?', [eventId]);
@@ -404,7 +404,7 @@ router.post('/:id/allocations', requireRole('owner'), async (req, res, next) => 
   } catch (e) { next(e); }
 });
 
-router.delete('/:id/allocations', requireRole('owner'), async (req, res, next) => {
+router.delete('/:id/allocations', requireDelete, async (req, res, next) => {
   try {
     const eventId = Number(req.params.id);
     await db.run('DELETE FROM event_allocations WHERE event_id = ?', [eventId]);
@@ -413,7 +413,7 @@ router.delete('/:id/allocations', requireRole('owner'), async (req, res, next) =
   } catch (e) { next(e); }
 });
 
-router.delete('/:id/allocations/:aid', requireRole('owner'), async (req, res, next) => {
+router.delete('/:id/allocations/:aid', requireDelete, async (req, res, next) => {
   try {
     const eventId = Number(req.params.id);
     const aid = Number(req.params.aid);

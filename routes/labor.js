@@ -1,7 +1,7 @@
 // routes/labor.js — worker profiles + standard daily wages.
 const express = require('express');
 const db = require('../db');
-const { authRequired, requireRole } = require('../middleware/auth');
+const { authRequired, requireWrite, requireDelete } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(authRequired);
@@ -24,7 +24,7 @@ router.get('/', async (_req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post('/', requireRole('owner'), async (req, res, next) => {
+router.post('/', requireWrite, async (req, res, next) => {
   try {
     const r = row(req.body);
     if (!r[0]) return res.status(400).json({ error: 'name is required' });
@@ -38,7 +38,7 @@ router.post('/', requireRole('owner'), async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.put('/:id', requireRole('owner'), async (req, res, next) => {
+router.put('/:id', requireWrite, async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const existing = await db.get('SELECT * FROM labor WHERE id = ?', [id]);
@@ -56,7 +56,7 @@ router.put('/:id', requireRole('owner'), async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.delete('/:id', requireRole('owner'), async (req, res, next) => {
+router.delete('/:id', requireDelete, async (req, res, next) => {
   try {
     const info = await db.run('DELETE FROM labor WHERE id = ?', [Number(req.params.id)]);
     if (!info.changes) return res.status(404).json({ error: 'Not found' });
