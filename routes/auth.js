@@ -21,9 +21,19 @@ const ALLOW_LOGIN_ALL = ALLOWED_LOGIN_EMAILS.length === 0;
 const ALLOW_PUBLIC_SIGNUP = String(process.env.DISABLE_PUBLIC_SIGNUP || '').toLowerCase() !== 'true'
   && String(process.env.ALLOW_PUBLIC_SIGNUP || '').toLowerCase() === 'true';
 
-function emailAllowed(email) {
+async function emailAllowed(email) {
+  const normalized = String(email || '').trim().toLowerCase();
   if (ALLOW_LOGIN_ALL) return true;
-  return ALLOWED_LOGIN_EMAILS.includes(String(email || '').trim().toLowerCase());
+  if (ALLOWED_LOGIN_EMAILS.includes(normalized)) return true;
+  // Fallback: any user that already exists in the users table can log in.
+  // Owners create accounts via /api/users (owner/admin only), so the
+  // presence of an account in the DB is itself authorisation.
+  try {
+    const row = await db.get('SELECT id FROM users WHERE email = ?', [normalized]);
+    return !!row;
+  } catch (_) {
+    return false;
+  }
 }
 
 function signToken(user) {
@@ -53,7 +63,7 @@ router.post('/signup', async (req, res, next) => {
     if (!email || !password || !name) {
       return res.status(400).json({ error: 'email, password and name are required' });
     }
-    if (!emailAllowed(email)) {
+    if (!(await emailAllowed(email))) {
       return res.status(403).json({ error: 'Signup is restricted to authorised emails.' });
     }
     const normalizedEmail = String(email).trim().toLowerCase();
@@ -82,7 +92,7 @@ router.post('/login', async (req, res, next) => {
 
     // Reject up-front if the email is not in the allowlist. Use a generic
     // 401 (not 403) so we don't leak whether the email exists.
-    if (!emailAllowed(normalized)) {
+    if (!(await emailAllowed(normalized))) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
