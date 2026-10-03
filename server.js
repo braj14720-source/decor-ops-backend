@@ -39,7 +39,7 @@ app.use('/api/push', pushRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error('[error]', err);
-  res.status(500).json({ error: 'Internal server error' });
+  res.status(500).json({ error: err.message || 'Internal server error' });
 });
 
 const PORT = Number(process.env.PORT || 4000);
