@@ -35,7 +35,9 @@ app.use(cors({
     if (ALLOWED_ORIGINS.length === 0) return cb(null, true);   // dev: allow all
     if (!origin) return cb(null, true);                        // server-to-server / curl
     if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
-    return cb(new Error(`Origin ${origin} not allowed`));
+    const err = new Error(`Origin ${origin} not allowed`);
+    err.status = 403;
+    return cb(err);
   },
   credentials: false,
 }));
@@ -58,8 +60,9 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/push', pushRoutes);
 
 app.use((err, _req, res, _next) => {
-  console.error('[error]', err);
-  res.status(500).json({ error: err.message || 'Internal server error' });
+  const status = Number(err && err.status) || 500;
+  if (status >= 500) console.error('[error]', err);
+  res.status(status).json({ error: err.message || 'Internal server error' });
 });
 
 const PORT = Number(process.env.PORT || 4000);
