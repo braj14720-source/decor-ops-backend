@@ -11,7 +11,7 @@
 
 const express = require('express');
 const db = require('../db');
-const { authRequired } = require('../middleware/auth');
+const { authRequired, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(authRequired);
@@ -42,7 +42,7 @@ router.get('/', (req, res) => {
   res.json({ settings: rowToDto(row) });
 });
 
-router.put('/', (req, res) => {
+router.put('/', requireRole('owner'), (req, res) => {
   ensureRow(req.user.id);
   const b = req.body || {};
   const next = {

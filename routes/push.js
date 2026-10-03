@@ -1,7 +1,7 @@
 // routes/push.js — register / unregister FCM device tokens.
 const express = require('express');
 const db = require('../db');
-const { authRequired } = require('../middleware/auth');
+const { authRequired, requireRole } = require('../middleware/auth');
 const push = require('../services/push');
 
 const router = express.Router();
@@ -10,7 +10,7 @@ router.use(authRequired);
 const TOKEN_RE = /^[A-Za-z0-9_\-:]{20,}$/;
 
 // POST /api/push/register { token, platform }
-router.post('/register', (req, res) => {
+router.post('/register', requireRole('owner'), (req, res) => {
   const { token, platform } = req.body || {};
   if (!token || !TOKEN_RE.test(token)) {
     return res.status(400).json({ error: 'invalid token' });
@@ -30,7 +30,7 @@ router.post('/register', (req, res) => {
 });
 
 // DELETE /api/push/register  { token }
-router.delete('/register', (req, res) => {
+router.delete('/register', requireRole('owner'), (req, res) => {
   const token = (req.body && req.body.token) || req.query.token;
   if (!token) return res.status(400).json({ error: 'token required' });
   db.prepare('DELETE FROM device_tokens WHERE token = ? AND user_id = ?').run(token, req.user.id);

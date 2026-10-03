@@ -180,7 +180,7 @@ router.get('/', (_req, res) => {
 });
 
 // POST /api/backups — create a new snapshot. Body: { upload?: bool }
-router.post('/', async (req, res, next) => {
+router.post('/', requireRole('owner'), async (req, res, next) => {
   try {
     const wantUpload = !!(req.body && req.body.upload) && s3Enabled();
     if ((req.body && req.body.upload) && !s3Enabled()) {
@@ -206,7 +206,7 @@ router.get('/:id/download', (req, res) => {
 });
 
 // DELETE /api/backups/:id
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requireRole('owner'), (req, res) => {
   const filename = req.params.id.endsWith('.db') ? req.params.id : `${req.params.id}.db`;
   if (filename.includes('/') || filename.includes('..')) {
     return res.status(400).json({ error: 'invalid id' });

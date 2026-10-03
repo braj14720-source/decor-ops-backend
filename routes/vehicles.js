@@ -1,7 +1,7 @@
 // routes/vehicles.js — logistics / trip logs.
 const express = require('express');
 const db = require('../db');
-const { authRequired } = require('../middleware/auth');
+const { authRequired, requireRole } = require('../middleware/auth');
 const push = require('../services/push');
 
 const router = express.Router();
@@ -32,7 +32,7 @@ router.get('/', (req, res) => {
   res.json({ items });
 });
 
-router.post('/', (req, res) => {
+router.post('/', requireRole('owner'), (req, res) => {
   const r = row(req.body);
   if (!r.vehicle_no) return res.status(400).json({ error: 'vehicle_no is required' });
   const info = db
@@ -47,7 +47,7 @@ router.post('/', (req, res) => {
   res.status(201).json({ item });
 });
 
-router.put('/:id', (req, res) => {
+router.put('/:id', requireRole('owner'), (req, res) => {
   const id = Number(req.params.id);
   const existing = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(id);
   if (!existing) return res.status(404).json({ error: 'Not found' });
@@ -76,7 +76,7 @@ router.put('/:id', (req, res) => {
   res.json({ item });
 });
 
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requireRole('owner'), (req, res) => {
   const info = db.prepare('DELETE FROM vehicles WHERE id = ?').run(Number(req.params.id));
   if (!info.changes) return res.status(404).json({ error: 'Not found' });
   res.json({ ok: true });

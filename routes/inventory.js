@@ -1,7 +1,7 @@
 // routes/inventory.js — CRUD for materials.
 const express = require('express');
 const db = require('../db');
-const { authRequired } = require('../middleware/auth');
+const { authRequired, requireRole } = require('../middleware/auth');
 const push = require('../services/push');
 
 const router = express.Router();
@@ -40,7 +40,7 @@ router.get('/by-barcode/:code', (req, res) => {
 });
 
 // POST /api/inventory
-router.post('/', (req, res) => {
+router.post('/', requireRole('owner'), (req, res) => {
   const r = row(req.body);
   if (!r.name) return res.status(400).json({ error: 'name is required' });
   if (r.barcode) {
@@ -58,7 +58,7 @@ router.post('/', (req, res) => {
 });
 
 // PUT /api/inventory/:id
-router.put('/:id', (req, res) => {
+router.put('/:id', requireRole('owner'), (req, res) => {
   const id = Number(req.params.id);
   const existing = db.prepare('SELECT * FROM inventory WHERE id = ?').get(id);
   if (!existing) return res.status(404).json({ error: 'Not found' });
@@ -103,7 +103,7 @@ router.put('/:id', (req, res) => {
 });
 
 // DELETE /api/inventory/:id
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requireRole('owner'), (req, res) => {
   const info = db.prepare('DELETE FROM inventory WHERE id = ?').run(Number(req.params.id));
   if (!info.changes) return res.status(404).json({ error: 'Not found' });
   res.json({ ok: true });

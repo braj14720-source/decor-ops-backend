@@ -1,7 +1,7 @@
 // routes/attendance.js — daily attendance + auto-calculated salary.
 const express = require('express');
 const db = require('../db');
-const { authRequired } = require('../middleware/auth');
+const { authRequired, requireRole } = require('../middleware/auth');
 const push = require('../services/push');
 
 const router = express.Router();
@@ -41,7 +41,7 @@ router.get('/', (req, res) => {
 });
 
 // POST /api/attendance  { labor_id, date, status, overtime_hours, notes }
-router.post('/', (req, res) => {
+router.post('/', requireRole('owner'), (req, res) => {
   const r = row(req.body);
   if (!r.labor_id || !r.date) return res.status(400).json({ error: 'labor_id and date are required' });
   const labor = db.prepare('SELECT id FROM labor WHERE id = ?').get(r.labor_id);

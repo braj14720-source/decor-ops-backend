@@ -26,7 +26,7 @@
 
 const express = require('express');
 const db = require('../db');
-const { authRequired } = require('../middleware/auth');
+const { authRequired, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(authRequired);
@@ -169,7 +169,7 @@ router.get('/', (req, res) => {
 });
 
 // POST /api/events — body may include `source_teams: [...]` for one-shot creation
-router.post('/', (req, res) => {
+router.post('/', requireRole('owner'), (req, res) => {
   const r = row(req.body);
   if (!r.name) return res.status(400).json({ error: 'name is required' });
 
@@ -231,7 +231,7 @@ router.get('/:id', (req, res) => {
 });
 
 // PUT /api/events/:id
-router.put('/:id', (req, res) => {
+router.put('/:id', requireRole('owner'), (req, res) => {
   const eventId = Number(req.params.id);
   const ev = db.prepare('SELECT * FROM events WHERE id = ?').get(eventId);
   if (!ev) return res.status(404).json({ error: 'Event not found' });
@@ -256,7 +256,7 @@ router.put('/:id', (req, res) => {
 });
 
 // DELETE /api/events/:id
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requireRole('owner'), (req, res) => {
   const eventId = Number(req.params.id);
   const ev = db.prepare('SELECT * FROM events WHERE id = ?').get(eventId);
   if (!ev) return res.status(404).json({ error: 'Event not found' });
@@ -276,7 +276,7 @@ router.get('/:id/source-teams', (req, res) => {
 });
 
 // POST /api/events/:id/source-teams
-router.post('/:id/source-teams', (req, res) => {
+router.post('/:id/source-teams', requireRole('owner'), (req, res) => {
   const eventId = Number(req.params.id);
   const ev = db.prepare('SELECT id FROM events WHERE id = ?').get(eventId);
   if (!ev) return res.status(404).json({ error: 'Event not found' });
@@ -301,7 +301,7 @@ router.post('/:id/source-teams', (req, res) => {
 });
 
 // PUT /api/events/:id/source-teams/:stid
-router.put('/:id/source-teams/:stid', (req, res) => {
+router.put('/:id/source-teams/:stid', requireRole('owner'), (req, res) => {
   const eventId = Number(req.params.id);
   const stid = Number(req.params.stid);
   const st = db
@@ -332,7 +332,7 @@ router.put('/:id/source-teams/:stid', (req, res) => {
 });
 
 // DELETE /api/events/:id/source-teams/:stid
-router.delete('/:id/source-teams/:stid', (req, res) => {
+router.delete('/:id/source-teams/:stid', requireRole('owner'), (req, res) => {
   const eventId = Number(req.params.id);
   const stid = Number(req.params.stid);
   const st = db
@@ -366,7 +366,7 @@ router.get('/:id/allocations', (req, res) => {
 
 // POST /api/events/:id/allocations — bulk upsert
 // body: { items: [{ labor_id, source_team_id?, pm_team, role?, notes? }, ...] }
-router.post('/:id/allocations', (req, res) => {
+router.post('/:id/allocations', requireRole('owner'), (req, res) => {
   const eventId = Number(req.params.id);
   const ev = db.prepare('SELECT id FROM events WHERE id = ?').get(eventId);
   if (!ev) return res.status(404).json({ error: 'Event not found' });
@@ -431,7 +431,7 @@ router.post('/:id/allocations', (req, res) => {
 });
 
 // DELETE /api/events/:id/allocations — clear all
-router.delete('/:id/allocations', (req, res) => {
+router.delete('/:id/allocations', requireRole('owner'), (req, res) => {
   const eventId = Number(req.params.id);
   db.prepare('DELETE FROM event_allocations WHERE event_id = ?').run(eventId);
   recomputeEventTotals(eventId);
@@ -439,7 +439,7 @@ router.delete('/:id/allocations', (req, res) => {
 });
 
 // DELETE /api/events/:id/allocations/:aid
-router.delete('/:id/allocations/:aid', (req, res) => {
+router.delete('/:id/allocations/:aid', requireRole('owner'), (req, res) => {
   const eventId = Number(req.params.id);
   const aid = Number(req.params.aid);
   const alloc = db
