@@ -16,19 +16,31 @@ services:
         value: "20"
       - key: JWT_SECRET
         generateValue: true   # Render generates a random secret on first deploy
-      - key: DB_PATH
-        value: /var/data/decorops.db
       - key: PORT
         value: "10000"
+
+      # Database connection:
+      #   - If DB_URL (or TURSO_DATABASE_URL) is set, the backend talks to
+      #     that libsql:// endpoint (Turso or local libsql file).
+      #   - Otherwise it falls back to file:./data/decorops.db (ephemeral on
+      #     Render free plan — wiped on every code redeploy).
+      #
+      # To use Turso (recommended for persistence):
+      #   - Sign up at https://turso.tech (free, no card needed)
+      #   - Create a DB: turso db create decor-ops
+      #   - Get URL:    turso db show decor-ops --url
+      #   - Get token:  turso db tokens create decor-ops
+      #   - Set both below as Render env vars in the dashboard.
+      # - key: DB_URL
+      #   value: "libsql://decor-ops.turso.io"
+      # - key: DB_AUTH_TOKEN
+      #   value: "eyJ...your-token..."
+
       # Optional — if set, the server auto-creates this owner on first boot
-      # when no users exist. Remove or change later from the Render dashboard.
+      # when no users exist.
       # - key: BOOTSTRAP_OWNER_EMAIL
       #   value: "you@yourcompany.com"
       # - key: BOOTSTRAP_OWNER_PASSWORD
       #   value: "Strong#123"
       # - key: BOOTSTRAP_OWNER_NAME
       #   value: "Your Name"
-    disk:
-      name: decorops-data
-      mountPath: /var/data
-      sizeGB: 1
