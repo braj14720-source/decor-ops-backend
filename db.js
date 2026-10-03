@@ -180,6 +180,10 @@ CREATE TABLE IF NOT EXISTS events (
   date              TEXT,
   location          TEXT,
   client_name       TEXT,
+  customer_phone    TEXT,                                  -- client's phone number
+  project_manager   TEXT,                                  -- PM name
+  project_executive TEXT,                                  -- Executive name
+  consultant        TEXT,                                  -- Consultant name
   status            TEXT DEFAULT 'planning',
   total_workers     INTEGER DEFAULT 0,
   num_source_teams  INTEGER DEFAULT 0,
@@ -187,6 +191,31 @@ CREATE TABLE IF NOT EXISTS events (
   notes             TEXT,
   created_at        TEXT DEFAULT (datetime('now')),
   updated_at        TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS event_materials (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id        INTEGER NOT NULL,
+  inventory_id    INTEGER NOT NULL,
+  quantity        REAL    NOT NULL DEFAULT 1,
+  -- Mirrors Meragi's procurement workflow. Values:
+  --   'planning_pending'   – not yet sourced
+  --   'po_raised'          – purchase order created
+  --   'ready_for_procurement' – needs buyer action
+  --   'procurement_approval_required' – blocked on approval
+  --   'segregated'         – sourced & set aside in warehouse
+  --   'bom_finalized'      – bill of materials done, ready to ship
+  --   'dispatched'         – on the way to venue
+  --   'delivered_at_warehouse' – arrived at venue warehouse
+  --   'installed'          – set up at venue
+  --   'returned'           – brought back after event
+  status          TEXT    NOT NULL DEFAULT 'planning_pending',
+  notes           TEXT,
+  created_at      TEXT    DEFAULT (datetime('now')),
+  updated_at      TEXT    DEFAULT (datetime('now')),
+  UNIQUE(event_id, inventory_id),
+  FOREIGN KEY (event_id)     REFERENCES events(id)     ON DELETE CASCADE,
+  FOREIGN KEY (inventory_id) REFERENCES inventory(id) ON DELETE RESTRICT
 );
 
 CREATE TABLE IF NOT EXISTS event_source_teams (
@@ -218,6 +247,7 @@ CREATE INDEX IF NOT EXISTS idx_event_alloc_event ON event_allocations(event_id);
 CREATE INDEX IF NOT EXISTS idx_event_alloc_pm    ON event_allocations(event_id, pm_team);
 CREATE INDEX IF NOT EXISTS idx_event_src_team    ON event_source_teams(event_id);
 CREATE INDEX IF NOT EXISTS idx_inventory_barcode ON inventory(barcode);
+CREATE INDEX IF NOT EXISTS idx_event_materials_event ON event_materials(event_id);
 `;
 
 // ---- defensive user-table migrations ----------------------------------------
