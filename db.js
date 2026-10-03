@@ -251,10 +251,19 @@ async function maybeBootstrap() {
 const dbReady = (async () => {
   try {
     await client.execute('PRAGMA foreign_keys = ON');
-    await client.execute(SCHEMA);
+    // Split multi-statement schema string and run individually — libSQL's
+    // remote (Turso) execute() does not accept multi-statement strings
+    // the same way better-sqlite3 did.
+    const statements = SCHEMA
+      .split(/;\s*\n/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0 && !s.startsWith('--'));
+    for (const stmt of statements) {
+      await client.execute(stmt);
+    }
     await maybeBootstrap();
     const where = DB_URL.startsWith('libsql://') ? 'Turso (remote)' : `local file ${DB_URL}`;
-    console.log(`[db] Connected to ${where}`);
+    console.log(`[db] Connected to ${where} (${statements.length} schema stmts)`);
   } catch (e) {
     console.error('[db] Init failed:', e.message);
   }
